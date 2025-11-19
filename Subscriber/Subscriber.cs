@@ -2,16 +2,26 @@
 using RabbitMQ.Client.Events;
 using System.Text;
 
+string bindingKey;
+
+if (args.Length > 0)
+{
+    bindingKey = $"sector.{args[0]}";
+    Console.WriteLine($"Subscribing to sector {args[0]}");
+}
+else
+{
+    bindingKey = "sector.*";
+    Console.WriteLine("No sector specified. Subscribing to all sectors.");
+}
+
 var factory = new ConnectionFactory { HostName = "localhost" };
 using var connection = await factory.CreateConnectionAsync();
 using var channel = await connection.CreateChannelAsync();
 
-await channel.ExchangeDeclareAsync(exchange: "car-data",
-    type: ExchangeType.Fanout);
+await channel.ExchangeDeclareAsync(exchange: "car-data", type: ExchangeType.Topic);
 
-// declare a server-named queue
-string queueName = "car-data-queue";
-
+string queueName = $"car-data-subscriber-{Guid.NewGuid()}";
 await channel.QueueDeclareAsync(
     queue: queueName,
     durable: true,
@@ -20,9 +30,9 @@ await channel.QueueDeclareAsync(
     arguments: null
 );
 
-await channel.QueueBindAsync(queue: queueName, exchange: "car-data", routingKey: string.Empty);
+await channel.QueueBindAsync(queue: queueName, exchange: "car-data", routingKey: bindingKey);
 
-Console.WriteLine(" [*] Waiting for car data.");
+Console.WriteLine($" [*] Waiting for car data, for routing key: {bindingKey}");
 
 var consumer = new AsyncEventingBasicConsumer(channel);
 consumer.ReceivedAsync += (model, ea) =>

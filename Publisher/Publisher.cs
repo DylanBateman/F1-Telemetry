@@ -17,7 +17,7 @@ class Publisher
 
         await channel.ExchangeDeclareAsync(
             exchange: "car-data",
-            type: ExchangeType.Fanout
+            type: ExchangeType.Topic
         );
 
         while (true)
@@ -27,13 +27,15 @@ class Publisher
             var jsonTelemetry = JsonSerializer.Serialize(telemetry);
             var body = Encoding.UTF8.GetBytes(jsonTelemetry);
 
+            var routingKey = $"sector.{telemetry.Sector}";
+
             await channel.BasicPublishAsync(
                 exchange: "car-data",
-                routingKey: string.Empty,
+                routingKey: routingKey,
                 body: body
             );
 
-            Console.WriteLine($"[x] Sent telemetry: {jsonTelemetry}");
+            Console.WriteLine($"[x] Sent telemetry (routingKey={routingKey}): {jsonTelemetry}");
 
             // Wait 2 seconds
             await Task.Delay(2000);
