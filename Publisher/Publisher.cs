@@ -3,17 +3,37 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using F1Telemetry.Services;
+using RabbitMQ.Client;
+
 class Publisher
 {
     static async Task Main(string[] args)
     {
         var generator = new TelemetryDataGenerator();
 
+        var factory = new ConnectionFactory { HostName = "localhost" };
+        using var connection = await factory.CreateConnectionAsync();
+        using var channel = await connection.CreateChannelAsync();
+
+        await channel.ExchangeDeclareAsync(
+            exchange: "car-data",
+            type: ExchangeType.Fanout
+        );
+
         while (true)
         {
             var telemetry = generator.GenerateTelemetryData();
 
-            Console.WriteLine($"telemetry: Speed: {telemetry.SpeedKph}, Front Left: {telemetry.FrontLeftTyreTempC}, Front Right: {telemetry.FrontRightTyreTempC}, Rear Left: {telemetry.RearLeftTyreTempC}, Rear Right: {telemetry.RearRightTyreTempC}");
+            var jsonTelemetry = JsonSerializer.Serialize(telemetry);
+            var body = Encoding.UTF8.GetBytes(jsonTelemetry);
+
+            await channel.BasicPublishAsync(
+                exchange: "car-data",
+                routingKey: string.Empty,
+                body: body
+            );
+
+            Console.WriteLine($"[x] Sent telemetry: {jsonTelemetry}");
 
             // Wait 2 seconds
             await Task.Delay(2000);

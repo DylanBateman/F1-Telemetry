@@ -8,12 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="..\Models\**\*.cs" />
-    <Compile Include="..\Services\**\*.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="RabbitMQ.Client" Version="7.2.0" />
   </ItemGroup>
-  
+
 </Project>
