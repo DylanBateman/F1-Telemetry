@@ -94,3 +94,7 @@ Overall, this project expanded my understanding of Client/Server communication b
 1. Install Docker
 2. Run `docker-compose up --build`
 3. Open http://localhost:3000 in your browser
+
+## Image
+<img width="3536" height="1656" alt="29350797-DA65-476D-BB71-E642FE5E1522" src="https://github.com/user-attachments/assets/9b9a8e4f-c2ec-4ea3-8a03-4194effc6306" />
+
