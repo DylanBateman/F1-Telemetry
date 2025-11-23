@@ -1,0 +1,8 @@
+# Exclude build artifacts and dependencies from Docker contexts
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/.DS_Store
+**/.env
+**/.git

@@ -1,5 +1,6 @@
 using F1Telemetry.Services;
 using TelemetryApi.Services;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,9 @@ builder.Services.AddCors(options =>
             .AllowCredentials());
 });
 
+// Bind RabbitMQ settings from configuration/env vars (RabbitMq__HostName, etc.).
+builder.Services.Configure<RabbitMqSettings>(builder.Configuration.GetSection("RabbitMq"));
+
 // Generates fake telemetry and publishes it to RabbitMQ.
 builder.Services.AddSingleton<TelemetryDataGenerator>();
 builder.Services.AddHostedService<TelemetryPublisherService>();
@@ -24,19 +28,23 @@ builder.Services.AddHostedService<TelemetryPublisherService>();
 builder.Services.AddSingleton<IHostedService>(p => new TelemetrySubscriberService(
     p.GetRequiredService<ILogger<TelemetrySubscriberService>>(),
     p.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<TelemetryHub>>(),
-    "sector.*"));
+    "sector.*",
+    p.GetRequiredService<IOptions<RabbitMqSettings>>()));
 builder.Services.AddSingleton<IHostedService>(p => new TelemetrySubscriberService(
     p.GetRequiredService<ILogger<TelemetrySubscriberService>>(),
     p.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<TelemetryHub>>(),
-    "sector.1"));
+    "sector.1",
+    p.GetRequiredService<IOptions<RabbitMqSettings>>()));
 builder.Services.AddSingleton<IHostedService>(p => new TelemetrySubscriberService(
     p.GetRequiredService<ILogger<TelemetrySubscriberService>>(),
     p.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<TelemetryHub>>(),
-    "sector.2"));
+    "sector.2",
+    p.GetRequiredService<IOptions<RabbitMqSettings>>()));
 builder.Services.AddSingleton<IHostedService>(p => new TelemetrySubscriberService(
     p.GetRequiredService<ILogger<TelemetrySubscriberService>>(),
     p.GetRequiredService<Microsoft.AspNetCore.SignalR.IHubContext<TelemetryHub>>(),
-    "sector.3"));
+    "sector.3",
+    p.GetRequiredService<IOptions<RabbitMqSettings>>()));
 
 var app = builder.Build();
 
@@ -44,5 +52,15 @@ app.UseCors();
 
 // SignalR hub that relays telemetry to clients.
 app.MapHub<TelemetryHub>("/hubs/telemetry");
+
+// Print a simple startup banner so you know where to point the frontend.
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    try { Console.Clear(); } catch { /* ignore if console not available */ }
+    Console.WriteLine("==================================================");
+    Console.WriteLine("Frontend: http://localhost:3000");
+    Console.WriteLine("SignalR hub: http://localhost:5010/hubs/telemetry");
+    Console.WriteLine("==================================================");
+});
 
 app.Run();

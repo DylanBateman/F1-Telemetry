@@ -3,6 +3,7 @@ using System.Text.Json;
 using F1Telemetry.Services;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 
 namespace TelemetryApi.Services
@@ -11,22 +12,27 @@ namespace TelemetryApi.Services
     {
         private readonly TelemetryDataGenerator _generator;
         private readonly ILogger<TelemetryPublisherService> _logger;
+        private readonly RabbitMqSettings _settings;
 
-        public TelemetryPublisherService(TelemetryDataGenerator generator, ILogger<TelemetryPublisherService> logger)
+        public TelemetryPublisherService(
+            TelemetryDataGenerator generator,
+            ILogger<TelemetryPublisherService> logger,
+            IOptions<RabbitMqSettings> settings)
         {
             _generator = generator;
             _logger = logger;
+            _settings = settings.Value;
         }
 
         // generate telemtry data every 2 seconds and send the RabbitMQ queues
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var factory = new ConnectionFactory { HostName = "localhost" };
+            var factory = new ConnectionFactory { HostName = _settings.HostName };
 
-            await using var connection = await factory.CreateConnectionAsync();
+            await using var connection = await ConnectWithRetry(factory, stoppingToken);
             await using var channel = await connection.CreateChannelAsync();
 
-            await channel.ExchangeDeclareAsync(exchange: "car-data", type: ExchangeType.Topic, cancellationToken: stoppingToken);
+            await channel.ExchangeDeclareAsync(exchange: _settings.ExchangeName, type: ExchangeType.Topic, cancellationToken: stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
             {
@@ -37,7 +43,7 @@ namespace TelemetryApi.Services
                 var routingKey = $"sector.{telemetry.Sector}";
 
                 await channel.BasicPublishAsync(
-                    exchange: "car-data",
+                    exchange: _settings.ExchangeName,
                     routingKey: routingKey,
                     body: body,
                     mandatory: false,
@@ -54,6 +60,23 @@ namespace TelemetryApi.Services
                     break;
                 }
             }
+        }
+
+        private static async Task<IConnection> ConnectWithRetry(ConnectionFactory factory, CancellationToken stoppingToken)
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    return await factory.CreateConnectionAsync();
+                }
+                catch
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                }
+            }
+
+            throw new OperationCanceledException(stoppingToken);
         }
     }
 }

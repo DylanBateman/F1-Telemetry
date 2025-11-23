@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using RabbitMQ.Client;
 using RabbitMQ.Client.Events;
 
@@ -12,25 +13,28 @@ namespace TelemetryApi.Services
         private readonly ILogger<TelemetrySubscriberService> _logger;
         private readonly IHubContext<TelemetryHub> _hub;
         private readonly string _bindingKey;
+        private readonly RabbitMqSettings _settings;
 
         public TelemetrySubscriberService(
             ILogger<TelemetrySubscriberService> logger,
             IHubContext<TelemetryHub> hub,
-            string bindingKey)
+            string bindingKey,
+            IOptions<RabbitMqSettings> settings)
         {
             _logger = logger;
             _hub = hub;
             _bindingKey = bindingKey;
+            _settings = settings.Value;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            var factory = new ConnectionFactory { HostName = "localhost" };
+            var factory = new ConnectionFactory { HostName = _settings.HostName };
 
-            await using var connection = await factory.CreateConnectionAsync();
+            await using var connection = await ConnectWithRetry(factory, stoppingToken);
             await using var channel = await connection.CreateChannelAsync();
 
-            await channel.ExchangeDeclareAsync(exchange: "car-data", type: ExchangeType.Topic, cancellationToken: stoppingToken);
+            await channel.ExchangeDeclareAsync(exchange: _settings.ExchangeName, type: ExchangeType.Topic, cancellationToken: stoppingToken);
 
             var queueName = $"car-data-subscriber-{Guid.NewGuid()}";
             await channel.QueueDeclareAsync(
@@ -41,7 +45,7 @@ namespace TelemetryApi.Services
                 arguments: null,
                 cancellationToken: stoppingToken);
 
-            await channel.QueueBindAsync(queue: queueName, exchange: "car-data", routingKey: _bindingKey, cancellationToken: stoppingToken);
+            await channel.QueueBindAsync(queue: queueName, exchange: _settings.ExchangeName, routingKey: _bindingKey, cancellationToken: stoppingToken);
 
             var consumer = new AsyncEventingBasicConsumer(channel);
             consumer.ReceivedAsync += async (model, ea) =>
@@ -67,6 +71,23 @@ namespace TelemetryApi.Services
             {
                 _logger.LogInformation("Telemetry subscriber stopping");
             }
+        }
+
+        private static async Task<IConnection> ConnectWithRetry(ConnectionFactory factory, CancellationToken stoppingToken)
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                try
+                {
+                    return await factory.CreateConnectionAsync();
+                }
+                catch
+                {
+                    await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken);
+                }
+            }
+
+            throw new OperationCanceledException(stoppingToken);
         }
     }
 }

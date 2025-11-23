@@ -3,7 +3,8 @@ import { HubConnectionBuilder } from "@microsoft/signalr"
 import AllTelemetryDashboard from "../components/AllTelemetryDashboard"
 import SectorDashboard from "../components/SectorDashboard"
 
-const HUB_URL = "http://localhost:5171/hubs/telemetry"
+const HUB_URL =
+  import.meta.env.VITE_HUB_URL || "http://localhost:5010/hubs/telemetry"
 const SECTORS = [1, 2, 3]
 
 export default function MainOverviewPage() {

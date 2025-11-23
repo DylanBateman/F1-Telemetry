@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Backend/TelemetryApi/Dockerfile
+    environment:
+      # Override defaults from appsettings.json so the API uses the RabbitMQ container
+      RabbitMq__HostName: rabbitmq
+      RabbitMq__ExchangeName: car-data
+      RabbitMq__QueueName: car-data-subscriber
+      RabbitMq__RoutingKey: sector.*
+      TelemetryPublisher__PublishIntervalMs: 2000
+      TelemetryPublisher__CarId: "#14"
+      ASPNETCORE_URLS: http://+:5010
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "5010:5010"
+
+  ui:
+    build:
+      context: .
+      dockerfile: Frontend/f1-telemetry-dashboard/Dockerfile
+      args:
+        # The browser connects to the API via the host-mapped port
+        VITE_HUB_URL: http://localhost:5010/hubs/telemetry
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    ports:
+      - "5672:5672"
+      - "15672:15672"
