@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react"
 import { HubConnectionBuilder } from "@microsoft/signalr"
+import AllTelemetryDashboard from "../components/AllTelemetryDashboard"
 
 const HUB_URL = "http://localhost:5171/hubs/telemetry"
 
 export default function MainOverviewPage() {
   const [status, setStatus] = useState("connecting")
-  const [message, setMessage] = useState(null)
+  const [telemetry, setTelemetry] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -28,9 +29,7 @@ export default function MainOverviewPage() {
       }
     }
 
-    connection.on("telemetry", (payload) =>
-      setMessage({ payload, receivedAt: new Date().toISOString() })
-    )
+    connection.on("telemetry", (payload) => setTelemetry(JSON.parse(payload)))
 
     connection.onreconnecting(() => active && setStatus("reconnecting"))
     connection.onreconnected(() => active && setStatus("connected"))
@@ -68,32 +67,12 @@ export default function MainOverviewPage() {
         </div>
       </header>
 
-      <div className="space-y-12">
-        <section>
-          <h2 className="text-2xl font-semibold text-gray-200 mb-4 tracking-wider">
-            Full Telemetry
-          </h2>
-          {!message ? (
-            <p className="text-gray-400">Waiting for data...</p>
-          ) : (
-            <div className="bg-[#022a26]/60 border border-[#0c4c44] rounded-lg p-4 text-gray-200">
-              <div className="text-sm text-[#cedc00] mb-2">
-                Last update: {new Date(message.receivedAt).toLocaleTimeString()}
-              </div>
-              <pre className="whitespace-pre-wrap break-words text-sm text-gray-100">
-                {message.payload}
-              </pre>
-            </div>
-          )}
-        </section>
-
-        <section>
-          <h2 className="text-2xl font-semibold text-gray-200 mb-4 tracking-wider">
-            Sector Performance
-          </h2>
-          <p className="text-gray-400">Waiting for data...</p>
-        </section>
-      </div>
+      <section>
+        <AllTelemetryDashboard
+          telemetry={telemetry}
+          connectionStatus={status}
+        />
+      </section>
     </div>
   )
 }
