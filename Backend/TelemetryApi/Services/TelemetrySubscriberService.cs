@@ -34,9 +34,16 @@ namespace TelemetryApi.Services
             await using var connection = await ConnectWithRetry(factory, stoppingToken);
             await using var channel = await connection.CreateChannelAsync();
 
-            await channel.ExchangeDeclareAsync(exchange: _settings.ExchangeName, type: ExchangeType.Topic, cancellationToken: stoppingToken);
+            await channel.ExchangeDeclareAsync(
+                exchange: _settings.ExchangeName,
+                type: ExchangeType.Topic,
+                durable: true,
+                autoDelete: false,
+                arguments: null,
+                cancellationToken: stoppingToken);
 
-            var queueName = $"car-data-subscriber-{Guid.NewGuid()}";
+            var sanitizedBinding = _bindingKey.Replace("*", "all").Replace(".", "-");
+            var queueName = $"{_settings.QueueName}-{Guid.NewGuid()}";
             await channel.QueueDeclareAsync(
                 queue: queueName,
                 durable: true,
@@ -47,21 +54,36 @@ namespace TelemetryApi.Services
 
             await channel.QueueBindAsync(queue: queueName, exchange: _settings.ExchangeName, routingKey: _bindingKey, cancellationToken: stoppingToken);
 
+            await channel.BasicQosAsync(
+                prefetchSize: 0,
+                prefetchCount: 10,
+                global: false,
+                cancellationToken: stoppingToken);
+
             var consumer = new AsyncEventingBasicConsumer(channel);
             consumer.ReceivedAsync += async (model, ea) =>
             {
-                var message = Encoding.UTF8.GetString(ea.Body.ToArray());
-                _logger.LogInformation("[x] ({BindingKey}) {Message}", _bindingKey, message);
-
-                await _hub.Clients.Group("all").SendAsync("telemetry", message, stoppingToken);
-
-                if (_bindingKey.StartsWith("sector.", StringComparison.Ordinal) && _bindingKey != "sector.*")
+                try
                 {
-                    await _hub.Clients.Group(_bindingKey).SendAsync("telemetry", message, stoppingToken);
+                    var message = Encoding.UTF8.GetString(ea.Body.ToArray());
+                    _logger.LogInformation("[x] ({BindingKey}) {Message}", _bindingKey, message);
+
+                    await _hub.Clients.Group("all").SendAsync("telemetry", message, stoppingToken);
+
+                    if (_bindingKey.StartsWith("sector.", StringComparison.Ordinal) && _bindingKey != "sector.*")
+                    {
+                        await _hub.Clients.Group(_bindingKey).SendAsync("telemetry", message, stoppingToken);
+                    }
+                    await channel.BasicAckAsync(ea.DeliveryTag, multiple: false, cancellationToken: stoppingToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Failed to process message for {BindingKey}", _bindingKey);
+                    await channel.BasicNackAsync(ea.DeliveryTag, multiple: false, requeue: true, cancellationToken: stoppingToken);
                 }
             };
 
-            await channel.BasicConsumeAsync(queue: queueName, autoAck: true, consumer: consumer, cancellationToken: stoppingToken);
+            await channel.BasicConsumeAsync(queue: queueName, autoAck: false, consumer: consumer, cancellationToken: stoppingToken);
 
             try
             {

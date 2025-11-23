@@ -32,7 +32,13 @@ namespace TelemetryApi.Services
             await using var connection = await ConnectWithRetry(factory, stoppingToken);
             await using var channel = await connection.CreateChannelAsync();
 
-            await channel.ExchangeDeclareAsync(exchange: _settings.ExchangeName, type: ExchangeType.Topic, cancellationToken: stoppingToken);
+            await channel.ExchangeDeclareAsync(
+                exchange: _settings.ExchangeName,
+                type: ExchangeType.Topic,
+                durable: true,
+                autoDelete: false,
+                arguments: null,
+                cancellationToken: stoppingToken);
 
             while (!stoppingToken.IsCancellationRequested)
             {
