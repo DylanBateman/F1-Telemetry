@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react"
 import { HubConnectionBuilder } from "@microsoft/signalr"
 import AllTelemetryDashboard from "../components/AllTelemetryDashboard"
+import SectorDashboard from "../components/SectorDashboard"
 
 const HUB_URL = "http://localhost:5171/hubs/telemetry"
+const SECTORS = [1, 2, 3]
 
 export default function MainOverviewPage() {
   const [status, setStatus] = useState("connecting")
   const [telemetry, setTelemetry] = useState(null)
+  const [sectorData, setSectorData] = useState({ 1: null, 2: null, 3: null })
 
   useEffect(() => {
     let active = true
@@ -16,32 +19,31 @@ export default function MainOverviewPage() {
       .withAutomaticReconnect()
       .build()
 
+    connection.on("telemetry", (payload) => {
+      const data = JSON.parse(payload)
+      if (!active) return
+
+      setTelemetry(data)
+      setSectorData((prev) => ({ ...prev, [data.Sector]: data }))
+    })
+
     const startConnection = async () => {
       if (!active) return
       setStatus("connecting")
       try {
         await connection.start()
+        await Promise.all(
+          SECTORS.map((s) => connection.invoke("JoinSector", s))
+        )
         if (active) setStatus("connected")
-      } catch (e) {
+      } catch {
         if (!active) return
         setStatus("disconnected")
         setTimeout(startConnection, 3000)
       }
     }
 
-    connection.on("telemetry", (payload) => setTelemetry(JSON.parse(payload)))
-
-    connection.onreconnecting(() => active && setStatus("reconnecting"))
-    connection.onreconnected(() => active && setStatus("connected"))
-
-    connection.onclose(() => {
-      if (!active) return
-      setStatus("disconnected")
-      startConnection()
-    })
-
     startConnection()
-
     return () => {
       active = false
       connection.stop()
@@ -72,6 +74,17 @@ export default function MainOverviewPage() {
           telemetry={telemetry}
           connectionStatus={status}
         />
+      </section>
+
+      <section className="mt-6 grid gap-4 md:grid-cols-3">
+        {SECTORS.map((sector) => (
+          <SectorDashboard
+            key={sector}
+            sector={sector}
+            telemetry={sectorData[sector]}
+            isActive={telemetry?.Sector === sector}
+          />
+        ))}
       </section>
     </div>
   )
