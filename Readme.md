@@ -96,5 +96,4 @@ Overall, this project expanded my understanding of Client/Server communication b
 3. Open http://localhost:3000 in your browser
 
 ## Image
-<img width="3536" height="1656" alt="29350797-DA65-476D-BB71-E642FE5E1522" src="https://github.com/user-attachments/assets/9b9a8e4f-c2ec-4ea3-8a03-4194effc6306" />
-
+<img width="1781" height="895" alt="Screenshot 2025-11-24 at 00 00 48" src="https://github.com/user-attachments/assets/6dc66616-382f-40e9-889f-9939033192ee" />
